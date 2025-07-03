@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tower Defense</title>
+<style>
+  body { margin: 0; }
+  canvas { background: #fff; display: block; margin: 0 auto; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
+const ENEMY_SPEED = 2;
+const ENEMY_HEALTH = 3;
+const TOWER_RANGE = 150;
+const TOWER_FIRE_RATE = 30; // frames
+let enemies = [];
+let towers = [];
+let projectiles = [];
+let spawnTimer = 0;
+
+class Enemy {
+  constructor() {
+    this.x = 0;
+    this.y = HEIGHT / 2;
+    this.size = 20;
+    this.health = ENEMY_HEALTH;
+    this.alive = true;
+  }
+  update() {
+    if (this.x < WIDTH) {
+      this.x += ENEMY_SPEED;
+    } else {
+      this.alive = false;
+    }
+  }
+  draw() {
+    ctx.fillStyle = 'red';
+    ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+  }
+}
+
+class Tower {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.size = 40;
+    this.timer = 0;
+  }
+  update() {
+    this.timer++;
+  }
+  draw() {
+    ctx.fillStyle = 'blue';
+    ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+  }
+  inRange(enemy) {
+    const dx = this.x - enemy.x;
+    const dy = this.y - enemy.y;
+    return dx*dx + dy*dy <= TOWER_RANGE*TOWER_RANGE;
+  }
+  shoot() {
+    if (this.timer >= TOWER_FIRE_RATE) {
+      for (const enemy of enemies) {
+        if (enemy.alive && this.inRange(enemy)) {
+          projectiles.push(new Projectile(this.x, this.y, enemy));
+          this.timer = 0;
+          break;
+        }
+      }
+    }
+  }
+}
+
+class Projectile {
+  constructor(x, y, target) {
+    this.x = x;
+    this.y = y;
+    this.size = 10;
+    this.target = target;
+    this.speed = 5;
+    this.alive = true;
+  }
+  update() {
+    if (!this.target.alive) {
+      this.alive = false;
+      return;
+    }
+    const dx = this.target.x - this.x;
+    const dy = this.target.y - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist !== 0) {
+      this.x += (dx/dist) * this.speed;
+      this.y += (dy/dist) * this.speed;
+    }
+    if (dist < this.speed) {
+      this.target.health--;
+      if (this.target.health <= 0) {
+        this.target.alive = false;
+      }
+      this.alive = false;
+    }
+  }
+  draw() {
+    ctx.fillStyle = 'green';
+    ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+  }
+}
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  towers.push(new Tower(x, y));
+});
+
+function spawnEnemy() {
+  enemies.push(new Enemy());
+}
+
+towers.push(new Tower(WIDTH/2, HEIGHT/2 - 100));
+
+function gameLoop() {
+  if (spawnTimer <= 0) {
+    spawnEnemy();
+    spawnTimer = 120;
+  }
+  spawnTimer--;
+
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  ctx.fillStyle = 'black';
+  ctx.beginPath();
+  ctx.arc(0, HEIGHT/2, 5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(WIDTH, HEIGHT/2, 5, 0, Math.PI*2);
+  ctx.fill();
+
+  for (const enemy of enemies) enemy.update();
+  for (const tower of towers) {
+    tower.update();
+    tower.shoot();
+  }
+  for (const projectile of projectiles) projectile.update();
+
+  enemies = enemies.filter(e => e.alive);
+  projectiles = projectiles.filter(p => p.alive);
+
+  for (const enemy of enemies) enemy.draw();
+  for (const tower of towers) tower.draw();
+  for (const projectile of projectiles) projectile.draw();
+
+  requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
