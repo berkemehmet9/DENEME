@@ -1,14 +1,15 @@
-import tkinter as tk
-from dataclasses import dataclass
 import math
-import random
+from dataclasses import dataclass
+
+from kivy.app import App
+from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle, Ellipse
+from kivy.uix.label import Label
+from kivy.uix.widget import Widget
 
 GRID_SIZE = 10
 CELL_SIZE = 50
-CANVAS_WIDTH = GRID_SIZE * CELL_SIZE
-CANVAS_HEIGHT = GRID_SIZE * CELL_SIZE
-
-PATH = [(i, GRID_SIZE//2) for i in range(GRID_SIZE)]
+PATH = [(i, GRID_SIZE // 2) for i in range(GRID_SIZE)]
 
 @dataclass
 class Tower:
@@ -16,65 +17,51 @@ class Tower:
     y: int
     range: int = 2
     damage: int = 10
-    def in_range(self, enemy):
+
+    def in_range(self, enemy) -> bool:
         return math.hypot(self.x - enemy.x, self.y - enemy.y) <= self.range
 
 @dataclass
 class Enemy:
     path_index: int = 0
     health: int = 30
+
     def move(self):
         if self.path_index + 1 < len(PATH):
             self.path_index += 1
+
     @property
-    def x(self):
+    def x(self) -> int:
         return PATH[self.path_index][0]
+
     @property
-    def y(self):
+    def y(self) -> int:
         return PATH[self.path_index][1]
 
-class Game(tk.Frame):
-    def __init__(self, master=None):
-        super().__init__(master)
-        self.master = master
-        self.pack()
-        self.canvas = tk.Canvas(self, width=CANVAS_WIDTH, height=CANVAS_HEIGHT, bg='white')
-        self.canvas.pack()
+class GameWidget(Widget):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.towers = []
         self.enemies = []
         self.life = 5
-        self.master.after(1000, self.spawn_enemy)
-        self.master.after(200, self.game_loop)
-        self.canvas.bind('<Button-1>', self.place_tower)
-        self.draw_grid()
+        Clock.schedule_interval(self.update, 1 / 10)
+        Clock.schedule_interval(lambda dt: self.spawn_enemy(), 3)
+        self.bind(size=lambda *a: self.draw())
 
-    def draw_grid(self):
-        for i in range(GRID_SIZE):
-            for j in range(GRID_SIZE):
-                x1, y1 = i * CELL_SIZE, j * CELL_SIZE
-                x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
-                fill = 'lightgray' if (i, j) in PATH else 'white'
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=fill, outline='gray')
-
-    def place_tower(self, event):
-        grid_x = event.x // CELL_SIZE
-        grid_y = event.y // CELL_SIZE
+    def on_touch_down(self, touch):
+        grid_x = int(touch.x // CELL_SIZE)
+        grid_y = int(touch.y // CELL_SIZE)
         if (grid_x, grid_y) in PATH:
             return
         if any(t.x == grid_x and t.y == grid_y for t in self.towers):
             return
-        tower = Tower(grid_x, grid_y)
-        self.towers.append(tower)
-        self.canvas.create_oval(grid_x*CELL_SIZE+10, grid_y*CELL_SIZE+10,
-                                (grid_x+1)*CELL_SIZE-10, (grid_y+1)*CELL_SIZE-10,
-                                fill='blue')
+        self.towers.append(Tower(grid_x, grid_y))
+        self.draw()
 
     def spawn_enemy(self):
         self.enemies.append(Enemy())
-        self.master.after(3000, self.spawn_enemy)
 
-    def game_loop(self):
-        self.canvas.delete('enemy')
+    def update(self, dt):
         for enemy in list(self.enemies):
             for tower in self.towers:
                 if tower.in_range(enemy):
@@ -89,16 +76,37 @@ class Game(tk.Frame):
                 if self.life <= 0:
                     self.game_over()
                     return
-            x, y = enemy.x * CELL_SIZE + CELL_SIZE//2, enemy.y * CELL_SIZE + CELL_SIZE//2
-            self.canvas.create_rectangle(x-10, y-10, x+10, y+10, fill='red', tags='enemy')
-        self.master.after(200, self.game_loop)
+        self.draw()
 
     def game_over(self):
-        self.canvas.delete('all')
-        self.canvas.create_text(CANVAS_WIDTH//2, CANVAS_HEIGHT//2, text='Game Over', font=('Arial', 24))
+        self.canvas.clear()
+        self.add_widget(Label(text="Game Over", font_size=40,
+                               center=self.center))
+        Clock.unschedule(self.update)
 
-if __name__ == '__main__':
-    root = tk.Tk()
-    root.title('Tower Defense')
-    game = Game(master=root)
-    game.mainloop()
+    def draw(self):
+        self.canvas.clear()
+        with self.canvas:
+            for i in range(GRID_SIZE):
+                for j in range(GRID_SIZE):
+                    x1, y1 = i * CELL_SIZE, j * CELL_SIZE
+                    Color(0.8, 0.8, 0.8 if (i, j) in PATH else 1)
+                    Rectangle(pos=(x1, y1), size=(CELL_SIZE, CELL_SIZE))
+            for tower in self.towers:
+                Color(0, 0, 1)
+                Ellipse(pos=(tower.x * CELL_SIZE + 10,
+                               tower.y * CELL_SIZE + 10),
+                        size=(CELL_SIZE - 20, CELL_SIZE - 20))
+            for enemy in self.enemies:
+                x = enemy.x * CELL_SIZE + CELL_SIZE / 2
+                y = enemy.y * CELL_SIZE + CELL_SIZE / 2
+                Color(1, 0, 0)
+                Rectangle(pos=(x - 10, y - 10), size=(20, 20))
+
+class TowerDefenseApp(App):
+    def build(self):
+        root = GameWidget(size=(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE))
+        return root
+
+if __name__ == "__main__":
+    TowerDefenseApp().run()
